@@ -1,0 +1,48 @@
+name: macOS SSH Test
+
+on:
+  workflow_dispatch: # allows manual triggering
+
+jobs:
+  test_macos:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Get System Info
+      id: sysinfo
+      run: |
+        echo "hostname=$(hostname)" >> $GITHUB_ENV
+        echo "os_version=$(sw_vers -productVersion)" >> $GITHUB_ENV
+        echo "cpu_info=$(sysctl -n machdep.cpu.brand_string)" >> $GITHUB_ENV
+        echo "memory_info=$(sysctl -n hw.memsize)" >> $GITHUB_ENV
+        echo "system_info=$(hostname) - $(sw_vers -productVersion) - $(sysctl -n machdep.cpu.brand_string) - $(sysctl -n hw.memsize)" >> $GITHUB_ENV
+
+    - name: Print System Info
+      run: |
+        echo "Hostname: $hostname"
+        echo "OS Version: $os_version"
+        echo "CPU: $cpu_info"
+        echo "Memory (bytes): $memory_info"
+
+    - name: Save JSON for Postman
+      run: |
+        echo "{
+          \"connection_test\": {
+            \"message\": \"SSH connection simulated\",
+            \"success\": true,
+            \"system_info\": {
+              \"hostname\": \"$hostname\",
+              \"os_version\": \"$os_version\",
+              \"cpu\": \"$cpu_info\",
+              \"memory_bytes\": \"$memory_info\"
+            }
+          },
+          \"system_name\": \"GitHub macOS Test\",
+          \"system_type\": \"macos\"
+        }" > macos_test_output.json
+
+    - name: Show JSON
+      run: cat macos_test_output.json
