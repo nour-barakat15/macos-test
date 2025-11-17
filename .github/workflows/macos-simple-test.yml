@@ -1,4 +1,4 @@
-name: macOS Auto-Resolve Test
+name: macOS Auto-Resolve Complete Test
 on: workflow_dispatch
 
 jobs:
@@ -29,3 +29,83 @@ jobs:
         
         echo "✅ ALL macOS AUTO-RESOLVE COMMANDS WORK!"
         echo "System: $(hostname) - $(sw_vers -productVersion)"
+
+    - name: Setup SSH for Real Testing
+      run: |
+        echo "🔧 Setting up SSH service..."
+        # Enable SSH service
+        sudo systemsetup -setremotelogin on
+        sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist
+        
+        # Create test user for auto-resolve
+        sudo dscl . -create /Users/autoresolve
+        sudo dscl . -create /Users/autoresolve UserShell /bin/bash
+        sudo dscl . -create /Users/autoresolve RealName "AutoResolve Test"
+        sudo dscl . -create /Users/autoresolve UniqueID 600
+        sudo dscl . -create /Users/autoresolve PrimaryGroupID 20
+        sudo dscl . -create /Users/autoresolve NFSHomeDirectory /Users/autoresolve
+        sudo dscl . -passwd /Users/autoresolve test123
+        
+        echo "✅ SSH service ready"
+
+    - name: Get Connection Information
+      id: connection_info
+      run: |
+        # Get external IP (if accessible)
+        EXTERNAL_IP=$(curl -s ifconfig.me 2>/dev/null || echo "unknown")
+        
+        # Get internal IP
+        INTERNAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "unknown")
+        
+        echo "external_ip=$EXTERNAL_IP" >> $GITHUB_OUTPUT
+        echo "internal_ip=$INTERNAL_IP" >> $GITHUB_OUTPUT
+        echo "ssh_username=autoresolve" >> $GITHUB_OUTPUT
+        echo "ssh_password=test123" >> $GITHUB_OUTPUT
+        echo "ssh_port=22" >> $GITHUB_OUTPUT
+        
+        echo "🌐 Connection Details:"
+        echo "External IP: $EXTERNAL_IP"
+        echo "Internal IP: $INTERNAL_IP"
+        echo "SSH Username: autoresolve"
+        echo "SSH Password: test123"
+        echo "Port: 22"
+
+    - name: Test SSH Connection to Self
+      run: |
+        echo "🧪 Testing SSH connection locally..."
+        ssh -o StrictHostKeyChecking=no autoresolve@localhost "echo '✅ SSH connection successful!'"
+        
+    - name: Create Test API Call for Your Auto-Resolve
+      run: |
+        echo "📋 API Call for Your Auto-Resolve System:"
+        echo "=========================================="
+        cat << EOF
+        Use this in Postman to test COMPLETE workflow:
+        
+        POST http://localhost:5000/api/v1/systems/add-with-learning
+        {
+          "name": "GitHub-macOS-RealTest",
+          "ip_address": "${{ steps.connection_info.outputs.external_ip }}",
+          "system_type": "macos",
+          "ssh_username": "autoresolve",
+          "ssh_port": 22,
+          "ssh_password": "test123",
+          "environment": "testing",
+          "tags": {
+            "github_actions": true,
+            "real_ssh_test": true
+          }
+        }
+        EOF
+
+    - name: Keep Alive for Real Testing
+      run: |
+        echo "⏰ GitHub Runner ACTIVE for 10 minutes - TEST NOW!"
+        echo "Run the API call above in Postman to test REAL SSH connection"
+        echo "Your auto-resolve should attempt to connect to: ${{ steps.connection_info.outputs.external_ip }}"
+        
+        # Keep runner alive for testing
+        for i in {1..60}; do
+          echo "⏳ Runner active - $(date) - $i/60 minutes"
+          sleep 10
+        done
