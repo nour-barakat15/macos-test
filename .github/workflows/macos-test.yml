@@ -1,57 +1,152 @@
 name: macOS Auto-Resolve Test
 
 on:
-  workflow_dispatch:  # Allow manual triggering
+  workflow_dispatch: # allows manual triggering
 
 jobs:
-  test-macos:
+  test_macos:
     runs-on: macos-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up SSH
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Get System Info
+      id: sysinfo
       run: |
-        # Generate SSH key for the runner
-        ssh-keygen -t rsa -b 4096 -C "github-actions-macos" -f ~/.ssh/id_rsa -N ""
+        echo "hostname=$(hostname)" >> $GITHUB_ENV
+        echo "os_version=$(sw_vers -productVersion)" >> $GITHUB_ENV
+        echo "cpu_info=$(sysctl -n machdep.cpu.brand_string)" >> $GITHUB_ENV
+        echo "memory_info=$(sysctl -n hw.memsize)" >> $GITHUB_ENV
+        echo "system_info=$(hostname) - $(sw_vers -productVersion) - $(sysctl -n machdep.cpu.brand_string) - $(sysctl -n hw.memsize)" >> $GITHUB_ENV
+
+    - name: Print System Info
+      run: |
+        echo "Hostname: $hostname"
+        echo "OS Version: $os_version"
+        echo "CPU: $cpu_info"
+        echo "Memory (bytes): $memory_info"
+
+    - name: Setup SSH for Auto-Resolve Testing
+      run: |
+        echo "🔧 Setting up SSH for auto-resolve testing..."
+        
+        # Generate SSH key pair
+        ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N "" -q
         
         # Start SSH service
         sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist
+        sudo systemsetup -setremotelogin on
         
-        # Set password for runner user (needed for your auto-resolve)
-        echo "runner:test123" | sudo chpasswd
+        # Add public key to authorized_keys
+        cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+        chmod 600 ~/.ssh/authorized_keys
         
-        # Allow password authentication
-        sudo sed -i.bak 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
-        sudo sed -i.bak 's/#PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
+        # Get current user and IP info
+        CURRENT_USER=$(whoami)
+        echo "current_user=$CURRENT_USER" >> $GITHUB_ENV
         
-        # Restart SSH
-        sudo launchctl stop com.openssh.sshd
-        sudo launchctl start com.openssh.sshd
+        # Create test environment for auto-resolve
+        mkdir -p ~/test-logs
+        echo "Creating test files for auto-resolve scenarios..."
         
-        # Get IP and display connection info
-        echo "MACOS_IP=$(ipconfig getifaddr en0)" >> $GITHUB_ENV
-        echo "SSH_PORT=22" >> $GITHUB_ENV
-        cat ~/.ssh/id_rsa.pub
-
-    - name: Install monitoring tools
-      run: |
-        # Install tools your auto-resolve needs
-        brew install procps  # for ps, top, free commands
-        # macOS has df, find, echo built-in
-
-    - name: Display connection info
-      run: |
-        echo "🖥️ macOS Runner is ready for SSH connection!"
-        echo "IP: ${{ env.MACOS_IP }}"
-        echo "Port: ${{ env.SSH_PORT }}"
-        echo "Username: runner"
-        echo "Password: test123"
-        echo "⏰ This runner will be available for ~6 hours"
-        
-        # Keep the runner alive
-        while true; do
-          echo "$(date): Runner alive and waiting for connections..."
-          sleep 300
+        # Create large log files to trigger disk alerts
+        for i in {1..3}; do
+          dd if=/dev/zero of=~/test-logs/large-log-$i.log bs=1M count=50 2>/dev/null
         done
+        
+        # Create some processes for CPU/memory testing
+        yes > /dev/null &
+        echo "test_process=$!" >> $GITHUB_ENV
+
+    - name: Display Connection Information
+      run: |
+        echo "🚀 macOS Runner Ready for Auto-Resolve Testing"
+        echo "=============================================="
+        echo "SSH Host: localhost"
+        echo "SSH Port: 22"
+        echo "Username: $current_user"
+        echo "System Type: macOS"
+        echo "=============================================="
+        echo "📋 Use these credentials in your Flask app to add this system:"
+        echo ""
+        echo "SSH Connection Details:"
+        echo "  - Hostname: localhost"
+        echo "  - Port: 22"
+        echo "  - Username: $current_user" 
+        echo "  - SSH Key: Use the generated private key below"
+        echo ""
+        echo "🔑 Private Key for SSH (copy this to your app):"
+        echo "=============================================="
+        cat ~/.ssh/id_rsa
+        echo "=============================================="
+
+    - name: Save Connection Details to JSON
+      run: |
+        PRIVATE_KEY=$(cat ~/.ssh/id_rsa)
+        echo "{
+          \"connection_test\": {
+            \"success\": true,
+            \"message\": \"SSH service ready for auto-resolve testing\",
+            \"system_info\": {
+              \"hostname\": \"$hostname\",
+              \"os_version\": \"$os_version\", 
+              \"cpu\": \"$cpu_info\",
+              \"memory_bytes\": \"$memory_info\",
+              \"ssh_user\": \"$current_user\",
+              \"ssh_host\": \"localhost\",
+              \"ssh_port\": 22
+            }
+          },
+          \"system_name\": \"GitHub-macOS-AutoResolve-Test\",
+          \"system_type\": \"macos\",
+          \"ssh_username\": \"$current_user\",
+          \"ssh_port\": 22,
+          \"ssh_private_key\": \"$PRIVATE_KEY\",
+          \"environment\": \"testing\",
+          \"auto_resolve_ready\": true,
+          \"test_scenarios\": [
+            \"disk_full\",
+            \"log_rotation\", 
+            \"high_cpu\",
+            \"high_memory\"
+          ]
+        }" > macos_auto_resolve_config.json
+
+    - name: Show Auto-Resolve Configuration
+      run: |
+        echo "📄 Auto-Resolve Configuration:"
+        cat macos_auto_resolve_config.json
+
+    - name: Keep Runner Alive for Testing
+      run: |
+        echo "⏰ Keeping macOS runner alive for 15 minutes for auto-resolve testing..."
+        echo "📊 Monitor your Flask app logs for connection attempts"
+        echo "🔍 The runner will automatically create test scenarios for:"
+        echo "   - Disk space issues (large test files created)"
+        echo "   - Log rotation needs"
+        echo "   - CPU/memory processes"
+        
+        # Display real-time system metrics
+        for i in {1..90}; do
+          echo "=== System Status @ $(date) ==="
+          df -h | head -3
+          echo "Memory:"
+          vm_stat | head -5
+          echo "CPU:"
+          top -l 1 -s 0 -n 5 | head -10
+          echo "Waiting for auto-resolve connections... ($i/90)"
+          sleep 10
+        done
+
+    - name: Cleanup Test Processes
+      if: always()
+      run: |
+        echo "🧹 Cleaning up test processes..."
+        # Kill the test process we created
+        if [ ! -z "$test_process" ]; then
+          kill $test_process 2>/dev/null || true
+        fi
+        # Remove test files
+        rm -rf ~/test-logs
+        echo "✅ Cleanup completed"
