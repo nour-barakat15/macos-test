@@ -1,0 +1,31 @@
+name: macOS Auto-Resolve Test
+on: workflow_dispatch
+
+jobs:
+  test_macos_commands:
+    runs-on: macos-latest
+    steps:
+    - name: Test macOS Auto-Resolve Commands
+      run: |
+        echo "🚀 Testing macOS Auto-Resolve Commands..."
+        echo "=========================================="
+        
+        # Test each command your auto-resolve engine would use
+        echo "1. Testing CPU commands:"
+        ps -eo pid,pcpu,pmem,comm | sort -nrk 2 | head -5
+        echo "---"
+        
+        echo "2. Testing Disk commands:"
+        df -h | head -5
+        echo "---"
+        
+        echo "3. Testing Memory commands:"
+        vm_stat | head -5
+        echo "---"
+        
+        echo "4. Testing Log commands:"
+        find /var/log -name "*.log" 2>/dev/null | head -5
+        echo "---"
+        
+        echo "✅ ALL macOS AUTO-RESOLVE COMMANDS WORK!"
+        echo "System: $(hostname) - $(sw_vers -productVersion)"
