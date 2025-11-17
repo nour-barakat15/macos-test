@@ -1,48 +1,57 @@
-name: macOS SSH Test
+name: macOS Auto-Resolve Test
 
 on:
-  workflow_dispatch: # allows manual triggering
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
-  test_macos:
+  test-macos:
     runs-on: macos-latest
-
+    
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
-
-    - name: Get System Info
-      id: sysinfo
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up SSH
       run: |
-        echo "hostname=$(hostname)" >> $GITHUB_ENV
-        echo "os_version=$(sw_vers -productVersion)" >> $GITHUB_ENV
-        echo "cpu_info=$(sysctl -n machdep.cpu.brand_string)" >> $GITHUB_ENV
-        echo "memory_info=$(sysctl -n hw.memsize)" >> $GITHUB_ENV
-        echo "system_info=$(hostname) - $(sw_vers -productVersion) - $(sysctl -n machdep.cpu.brand_string) - $(sysctl -n hw.memsize)" >> $GITHUB_ENV
+        # Generate SSH key for the runner
+        ssh-keygen -t rsa -b 4096 -C "github-actions-macos" -f ~/.ssh/id_rsa -N ""
+        
+        # Start SSH service
+        sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist
+        
+        # Set password for runner user (needed for your auto-resolve)
+        echo "runner:test123" | sudo chpasswd
+        
+        # Allow password authentication
+        sudo sed -i.bak 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+        sudo sed -i.bak 's/#PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
+        
+        # Restart SSH
+        sudo launchctl stop com.openssh.sshd
+        sudo launchctl start com.openssh.sshd
+        
+        # Get IP and display connection info
+        echo "MACOS_IP=$(ipconfig getifaddr en0)" >> $GITHUB_ENV
+        echo "SSH_PORT=22" >> $GITHUB_ENV
+        cat ~/.ssh/id_rsa.pub
 
-    - name: Print System Info
+    - name: Install monitoring tools
       run: |
-        echo "Hostname: $hostname"
-        echo "OS Version: $os_version"
-        echo "CPU: $cpu_info"
-        echo "Memory (bytes): $memory_info"
+        # Install tools your auto-resolve needs
+        brew install procps  # for ps, top, free commands
+        # macOS has df, find, echo built-in
 
-    - name: Save JSON for Postman
+    - name: Display connection info
       run: |
-        echo "{
-          \"connection_test\": {
-            \"message\": \"SSH connection simulated\",
-            \"success\": true,
-            \"system_info\": {
-              \"hostname\": \"$hostname\",
-              \"os_version\": \"$os_version\",
-              \"cpu\": \"$cpu_info\",
-              \"memory_bytes\": \"$memory_info\"
-            }
-          },
-          \"system_name\": \"GitHub macOS Test\",
-          \"system_type\": \"macos\"
-        }" > macos_test_output.json
-
-    - name: Show JSON
-      run: cat macos_test_output.json
+        echo "🖥️ macOS Runner is ready for SSH connection!"
+        echo "IP: ${{ env.MACOS_IP }}"
+        echo "Port: ${{ env.SSH_PORT }}"
+        echo "Username: runner"
+        echo "Password: test123"
+        echo "⏰ This runner will be available for ~6 hours"
+        
+        # Keep the runner alive
+        while true; do
+          echo "$(date): Runner alive and waiting for connections..."
+          sleep 300
+        done
